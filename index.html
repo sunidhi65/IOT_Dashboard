@@ -1,0 +1,482 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Water Quality Dashboard</title>
+
+  <!-- Bootstrap 5 -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+  <style>
+    body { background: #f6f9fc; }
+    .card { border-radius: 12px; }
+    .sensor-value { font-size: 2.0rem; font-weight: 700; }
+    .small-muted { color:#6c757d; font-size:.9rem; }
+    nav .nav-link { cursor:pointer; }
+  </style>
+</head>
+<body>
+
+  <!-- NAVBAR -->
+  <nav class="navbar navbar-expand-lg bg-white shadow-sm">
+    <div class="container-fluid">
+      <a class="navbar-brand fw-bold">Water Quality </a>
+
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+
+      <div class="collapse navbar-collapse" id="mainNav">
+        <ul class="navbar-nav me-auto">
+          <li class="nav-item"><a class="nav-link active" data-tab="dashboard">Dashboard</a></li>
+          <li class="nav-item"><a class="nav-link" data-tab="trends">Trends</a></li>
+          <li class="nav-item"><a class="nav-link" data-tab="sensors">Sensors</a></li>
+          <li class="nav-item"><a class="nav-link" data-tab="settings">Settings</a></li>
+          <li class="nav-item"><a class="nav-link" data-tab="about">About</a></li>
+        </ul>
+
+        <div class="d-flex gap-2">
+          <button id="refreshBtn" class="btn btn-outline-primary btn-sm">Refresh</button>
+          <span id="statusText" class="small-muted align-self-center">Idle</span>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- MAIN CONTENT -->
+  <main class="container my-4">
+
+    <!-- DASHBOARD -->
+    <div id="dashboard" class="tab-pane">
+
+      <!-- ALERT BOX -->
+      <div id="alertBox" class="mt-2"></div>
+
+      <div class="row g-3 mt-3">
+        <div class="col-md-3">
+          <div class="card p-3 text-center">
+            <div class="small-muted">pH</div>
+            <div id="phCard" class="sensor-value">--</div>
+            <div id="phStatus" class="small-muted">--</div>
+          </div>
+        </div>
+
+        <div class="col-md-3">
+          <div class="card p-3 text-center">
+            <div class="small-muted">TDS (ppm)</div>
+            <div id="tdsCard" class="sensor-value">--</div>
+            <div id="tdsStatus" class="small-muted">--</div>
+          </div>
+        </div>
+
+        <div class="col-md-3">
+          <div class="card p-3 text-center">
+            <div class="small-muted">Turbidity</div>
+            <div id="turbCard" class="sensor-value">--</div>
+            <div id="turbStatus" class="small-muted">--</div>
+          </div>
+        </div>
+
+        <div class="col-md-3">
+          <div class="card p-3 text-center">
+            <div class="small-muted">Temperature (°C)</div>
+            <div id="tempCard" class="sensor-value">--</div>
+            <div id="tempStatus" class="small-muted">--</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="row mt-4">
+        <div class="col-md-8">
+          <div class="card p-3">
+            <div class="d-flex justify-content-between">
+              <h5>Latest Readings</h5>
+              <div class="small-muted">Last update: <span id="lastUpdate">--</span></div>
+            </div>
+            <hr>
+            <pre id="latestJson" style="max-height:320px; overflow:auto; white-space:pre-wrap;"></pre>
+          </div>
+        </div>
+
+        <div class="col-md-4">
+          <div class="card p-3">
+            <h6>Quick Actions</h6>
+            <button id="openTrends" class="btn btn-outline-primary mb-2">Open Trends</button>
+            <button id="openSensors" class="btn btn-outline-secondary mb-2">Sensor Details</button>
+            <button id="openSettings" class="btn btn-outline-info">Settings</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- TRENDS -->
+    <div id="trends" class="tab-pane" style="display:none">
+      <div class="row g-3">
+        <div class="col-md-6"><div class="card p-3"><canvas id="chartPH"></canvas></div></div>
+        <div class="col-md-6"><div class="card p-3"><canvas id="chartTDS"></canvas></div></div>
+        <div class="col-md-6"><div class="card p-3 mt-3"><canvas id="chartTURB"></canvas></div></div>
+        <div class="col-md-6"><div class="card p-3 mt-3"><canvas id="chartTEMP"></canvas></div></div>
+      </div>
+    </div>
+
+    <!-- SENSORS -->
+    <div id="sensors" class="tab-pane" style="display:none">
+      <div class="card p-3">
+        <h5>Last 50 entries</h5><hr>
+        <div id="tableContainer" style="max-height:600px; overflow:auto;"></div>
+      </div>
+    </div>
+
+    <!-- SETTINGS -->
+    <div id="settings" class="tab-pane" style="display:none">
+      <div class="row">
+
+        <div class="col-md-6">
+          <div class="card p-3">
+            <h5>ThingSpeak Settings</h5>
+
+            <label class="form-label small-muted">Channel ID</label>
+            <input id="inputChannel" class="form-control mb-2" placeholder="Channel ID">
+
+            <label class="form-label small-muted">Read API Key</label>
+            <input id="inputKey" class="form-control mb-2" placeholder="API KEY">
+
+            <button id="saveSettings" class="btn btn-primary mt-2">Save</button>
+            <button id="testFetch" class="btn btn-outline-secondary mt-2">Test Fetch</button>
+
+            <div id="settingsStatus" class="small-muted mt-2"></div>
+          </div>
+        </div>
+
+        <!-- THRESHOLD SETTINGS -->
+        <div class="col-md-6">
+          <div class="card p-3">
+            <h5>Threshold Settings</h5>
+
+            <div class="row">
+
+              <div class="col-md-6">
+                <label>pH Min</label>
+                <input id="th_ph_min" class="form-control" type="number" step="0.1">
+              </div>
+              <div class="col-md-6">
+                <label>pH Max</label>
+                <input id="th_ph_max" class="form-control" type="number" step="0.1">
+              </div>
+
+              <div class="col-md-6 mt-2">
+                <label>TDS Min</label>
+                <input id="th_tds_min" class="form-control" type="number">
+              </div>
+              <div class="col-md-6 mt-2">
+                <label>TDS Max</label>
+                <input id="th_tds_max" class="form-control" type="number">
+              </div>
+
+              <div class="col-md-6 mt-2">
+                <label>Turb Min</label>
+                <input id="th_turb_min" class="form-control" type="number" step="0.01">
+              </div>
+              <div class="col-md-6 mt-2">
+                <label>Turb Max</label>
+                <input id="th_turb_max" class="form-control" type="number" step="0.01">
+              </div>
+
+              <div class="col-md-6 mt-2">
+                <label>Temp Min</label>
+                <input id="th_temp_min" class="form-control" type="number">
+              </div>
+              <div class="col-md-6 mt-2">
+                <label>Temp Max</label>
+                <input id="th_temp_max" class="form-control" type="number">
+              </div>
+
+            </div>
+
+            <button id="saveThresholds" class="btn btn-primary mt-3">Save Thresholds</button>
+            <div id="thresholdStatus" class="small-muted mt-2"></div>
+
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ABOUT -->
+    <div id="about" class="tab-pane" style="display:none">
+      <div class="card p-3">
+        <h5>About</h5>
+        <p class="small-muted"><p>
+    The Water Quality Monitoring System is an IoT-driven solution developed to analyze water conditions in real time. 
+    The system integrates pH, TDS, turbidity, and temperature sensors with ESP32/Arduino microcontrollers to capture 
+    accurate environmental data. Through built-in Wi-Fi, the collected data is uploaded to the ThingSpeak IoT cloud 
+    for storage, visualization, and further analysis.
+  </p>
+
+  <h6>Purpose and Motivation</h6>
+  <p>
+    Access to clean and safe water is essential for health, agriculture, industry, and environmental balance. 
+    Traditional water testing is often manual, time-consuming, and limited in frequency. This project provides 
+    a modern, automated approach to continuously observe water quality and instantly detect contamination or changes.
+  </p>
+
+  <h6>Key Features</h6>
+  <ul>
+    <li>Real-time monitoring of pH, TDS, turbidity, and temperature</li>
+    <li>IoT-based data transmission using Wi-Fi</li>
+    <li>ThingSpeak cloud integration for storage & charts</li>
+    <li>Interactive dashboard for live visualization</li>
+    <li>Customizable threshold limits for quality assessment</li>
+    <li>Alerts indicating safe/unsafe water conditions</li>
+  </ul>
+
+  <h6>Applications</h6>
+  <ul>
+    <li>Drinking water quality analysis</li>
+    <li>Domestic & commercial water filtration systems</li>
+    <li>Aquaculture and fisheries</li>
+    <li>River, lake, and reservoir monitoring</li>
+    <li>Agricultural irrigation water testing</li>
+    <li>Smart city and environmental projects</li>
+  </ul>
+
+  <h6>Objective</h6>
+  <p>
+    To develop a reliable, real-time, IoT-enabled water quality analysis system that provides continuous monitoring, 
+    easy visualization, and instant assessment of water suitability.
+  </p>
+</p>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- JS START -->
+<script>
+
+let CHANNEL_ID = "";
+let READ_KEY = "";
+let refreshTimer = null;
+let refreshSeconds = 15;
+
+// ----------------- Threshold defaults -----------------
+let THRESHOLDS = {
+  ph:   { min: 6.5, max: 8.5 },
+  tds:  { min: 0,   max: 500 },
+  turb: { min: 0,   max: 5 },
+  temp: { min: 10,  max: 35 }
+};
+
+// Load saved thresholds
+function loadThresholds(){
+  const saved = localStorage.getItem("WQ_THRESHOLDS");
+  if(saved){ THRESHOLDS = JSON.parse(saved); }
+
+  document.getElementById("th_ph_min").value  = THRESHOLDS.ph.min;
+  document.getElementById("th_ph_max").value  = THRESHOLDS.ph.max;
+  document.getElementById("th_tds_min").value = THRESHOLDS.tds.min;
+  document.getElementById("th_tds_max").value = THRESHOLDS.tds.max;
+  document.getElementById("th_turb_min").value= THRESHOLDS.turb.min;
+  document.getElementById("th_turb_max").value= THRESHOLDS.turb.max;
+  document.getElementById("th_temp_min").value= THRESHOLDS.temp.min;
+  document.getElementById("th_temp_max").value= THRESHOLDS.temp.max;
+}
+
+// Save thresholds
+document.getElementById("saveThresholds").addEventListener("click",()=>{
+  THRESHOLDS = {
+    ph:{min:+th_ph_min.value,max:+th_ph_max.value},
+    tds:{min:+th_tds_min.value,max:+th_tds_max.value},
+    turb:{min:+th_turb_min.value,max:+th_turb_max.value},
+    temp:{min:+th_temp_min.value,max:+th_temp_max.value}
+  };
+  localStorage.setItem("WQ_THRESHOLDS",JSON.stringify(THRESHOLDS));
+  thresholdStatus.innerText="Thresholds saved.";
+});
+
+// Charts
+const phChart = new Chart(chartPH,{type:'line',data:{labels:[],datasets:[{label:'pH',data:[],borderWidth:2,tension:0.3}]}});
+
+// Duplicate charts
+const tdsChart  = new Chart(chartTDS,{type:'line',data:{labels:[],datasets:[{label:'TDS',data:[],borderWidth:2,tension:0.3}]}});
+const turbChart = new Chart(chartTURB,{type:'line',data:{labels:[],datasets:[{label:'Turb',data:[],borderWidth:2,tension:0.3}]}});
+const tempChart = new Chart(chartTEMP,{type:'line',data:{labels:[],datasets:[{label:'Temp',data:[],borderWidth:2,tension:0.3}]}});
+
+// Tabs
+document.querySelectorAll('[data-tab]').forEach(el=>{
+  el.onclick=()=>openTab(el.dataset.tab);
+});
+openTrends.onclick = ()=>openTab("trends");
+openSensors.onclick= ()=>openTab("sensors");
+openSettings.onclick=()=>openTab("settings");
+
+// Open tab
+function openTab(name){
+  document.querySelectorAll(".tab-pane").forEach(x=>x.style.display="none");
+  document.getElementById(name).style.display="block";
+  document.querySelectorAll(".nav-link").forEach(x=>x.classList.remove("active"));
+  document.querySelector(`[data-tab="${name}"]`).classList.add("active");
+}
+
+// Save channel/key
+saveSettings.onclick = ()=>{
+  CHANNEL_ID = inputChannel.value.trim();
+  READ_KEY   = inputKey.value.trim();
+  settingsStatus.innerText="Saved. Testing...";
+  fetchAndRender();
+};
+
+testFetch.onclick=fetchAndRender;
+
+// Build API
+function buildApiUrl(results=50){
+  return `https://api.thingspeak.com/channels/${CHANNEL_ID}/feeds.json?api_key=${READ_KEY}&results=${results}`;
+}
+
+// Update charts
+function updateChart(chart, labels, data){
+  chart.data.labels = labels;
+  chart.data.datasets[0].data = data;
+  chart.update();
+}
+
+function safe(v){ return (v==null)?null:parseFloat(v); }
+
+// Main fetch
+async function fetchAndRender(){
+
+  if(!CHANNEL_ID || !READ_KEY){
+    statusText.innerText="Set channel/key first";
+    return;
+  }
+
+  statusText.innerText="Fetching...";
+
+  try{
+    const res = await fetch(buildApiUrl(50));
+    const data = await res.json();
+    const feeds = data.feeds;
+    const latest = feeds[feeds.length-1];
+
+    // Update cards
+    let ph = safe(latest.field1),
+        tds= safe(latest.field2),
+        turb=safe(latest.field3),
+        temp=safe(latest.field4);
+
+    phCard.innerText   = ph?.toFixed(2)   ?? "--";
+    tdsCard.innerText  = tds?.toFixed(1)  ?? "--";
+    turbCard.innerText = turb?.toFixed(3) ?? "--";
+    tempCard.innerText = temp?.toFixed(1) ?? "--";
+
+    // Status alerts
+    let alerts=[];
+
+    alerts.push( setStatus("phStatus",ph,"ph") );
+    alerts.push( setStatus("tdsStatus",tds,"tds") );
+    alerts.push( setStatus("turbStatus",turb,"turb") );
+    alerts.push( setStatus("tempStatus",temp,"temp") );
+
+    alerts = alerts.filter(a=>a!==null);
+    updateAlerts(alerts);
+
+    // Table
+    populateTable([...feeds].reverse());
+
+    // Charts
+    const labels = feeds.map(f=>f.created_at.substring(11,19));
+    updateChart(phChart, labels, feeds.map(f=>safe(f.field1)));
+    updateChart(tdsChart,labels,feeds.map(f=>safe(f.field2)));
+    updateChart(turbChart,labels,feeds.map(f=>safe(f.field3)));
+    updateChart(tempChart,labels,feeds.map(f=>safe(f.field4)));
+
+    latestJson.innerText = JSON.stringify(latest,null,2);
+    lastUpdate.innerText = new Date(latest.created_at).toLocaleString();
+    statusText.innerText="Updated";
+
+  }catch(e){
+    statusText.innerText="Fetch error";
+  }
+}
+
+// Status check using thresholds
+function setStatus(id,value,type){
+  const el = document.getElementById(id);
+  const min = THRESHOLDS[type].min;
+  const max = THRESHOLDS[type].max;
+
+  if(value==null || isNaN(value)){
+    el.innerHTML=`<span class="text-muted">No data</span>`;
+    return `${type.toUpperCase()}: No data`;
+  }
+
+  if(value < min){
+    el.innerHTML=`<span class="text-warning">LOW</span>`;
+    return `${type.toUpperCase()} LOW (${value})`;
+  }
+  if(value > max){
+    el.innerHTML=`<span class="text-danger">HIGH</span>`;
+    return `${type.toUpperCase()} HIGH (${value})`;
+  }
+
+  el.innerHTML=`<span class="text-success">OK</span>`;
+  return null;
+}
+
+// Alerts box
+function updateAlerts(list){
+  if(list.length===0){
+    alertBox.innerHTML="";
+    return;
+  }
+
+  let html=`<div class="alert alert-danger"><b>Alerts:</b><br>`;
+  list.forEach(a=>html+=`• ${a}<br>`);
+  html+=`</div>`;
+
+  alertBox.innerHTML = html;
+}
+
+// Table
+function populateTable(feeds){
+  let rows = feeds.slice(0,50).map(f=>`
+    <tr>
+      <td>${f.entry_id}</td>
+      <td>${new Date(f.created_at).toLocaleString()}</td>
+      <td>${f.field1??""}</td>
+      <td>${f.field2??""}</td>
+      <td>${f.field3??""}</td>
+      <td>${f.field4??""}</td>
+    </tr>`).join("");
+
+  tableContainer.innerHTML = `
+    <table class="table table-sm">
+      <thead>
+        <tr><th>ID</th><th>Time</th><th>pH</th><th>TDS</th><th>Turb</th><th>Temp</th></tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+// Timer
+function restartTimer(){
+  clearInterval(refreshTimer);
+  refreshTimer = setInterval(fetchAndRender, refreshSeconds*1000);
+}
+
+// Init
+loadThresholds();
+openTab("dashboard");
+fetchAndRender();
+restartTimer();
+
+refreshBtn.onclick = fetchAndRender;
+
+</script>
+</body>
+</html>
